@@ -1,0 +1,12 @@
+neo4j==5.21.0
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+python-dotenv==1.0.1
+httpx==0.27.0
+rich>=13.7,<16
+typer>=0.15,<0.27
+anthropic==0.34.2      # optional — only needed if you use Claude
+openai==1.35.0         # optional — only needed if you use OpenAI
+pytest==8.2.2
+scipy==1.13.1           # for paired t-test in eval/baselines.py

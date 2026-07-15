@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cemg"
+version = "0.3.0"
+description = "Causal Experience Memory Graph -- temporal causal memory API for long-horizon LLM agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "neo4j==5.21.0",
+    "fastapi==0.111.0",
+    "uvicorn==0.30.1",
+    "pydantic==2.7.4",
+    "python-dotenv==1.0.1",
+    "typer>=0.15,<0.27",
+    "rich>=13.7,<16",
+]
+
+[project.optional-dependencies]
+# Only needed if you actually run the LLM-in-the-loop agent/eval scripts --
+# the CLI's recall/peek/store/prune/health commands work without either.
+llm = ["anthropic==0.34.2", "openai==1.35.0"]
+dev = ["pytest==8.2.2", "scipy==1.13.1"]
+
+[project.scripts]
+cemg = "cemg.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["cemg*"]
