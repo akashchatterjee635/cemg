@@ -1,7 +1,7 @@
 # CEMG -- Causal Experience Memory Graph
 
 > A temporal causal memory API for long-horizon LLM agents.
-> No training required. Works with any LLM. Runs on your existing Neo4j.
+> No training required. Works with any LLM. Zero-setup local SQLite/In-Memory database out-of-the-box, scales up to Neo4j.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)]()
 [![Neo4j 5.x](https://img.shields.io/badge/neo4j-5.x-green)]()
@@ -29,20 +29,27 @@ since been fixed.
 | Cost (tokens/steps) shown alongside reliability | ✗ | ✓ so the LLM sees a real tradeoff, not just avoid/allow |
 | Stored-prompt-injection defense on external content | ✗ | ✓ sanitisation before write and embedding |
 | Cross-task memory isolation | ✗ | ✓ `task_namespace` |
-| Graceful degradation if the DB is unreachable | ✗ (crashes) | ✓ falls back to memory-less operation |
+| Graceful degradation if the DB is unreachable | ✗ (crashes) | ✓ automatically falls back to local SQLite |
 | Decay-triggered deletion (PII / unbounded growth) | ✗ | ✓ automated FastAPI lifespan scheduler & `/memory/prune` |
 | Verification status correctly isolated per task | ✗ | ✓ `task_namespace` in the ActionSignature match key, not just on raw experiences |
 | Compliance measured at the moment of decision | ✗ | ✓ pre-action snapshot via `peek_signature_status`, not a post-hoc re-query |
 
-## Quickstart
+## Quickstart (Zero-Setup Local SQLite)
+
+CEMG runs out-of-the-box on a local zero-dependency SQLite database (created automatically as `cemg_memory.db`). No Neo4j installation is required to get started.
 
 ```bash
 git clone https://github.com/akashchatterjee635/cemg
 cd cemg
-bash setup.sh            # installs deps, starts Neo4j, copies .env
-# -> edit .env: add your ANTHROPIC_API_KEY or OPENAI_API_KEY
-pytest tests/ -v          # 58 tests, zero setup required (no live DB needed)
-python demo/run_demo.py   # the PoC demo
+python -m venv venv
+# On Windows:
+.\venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+pip install -r requirements.txt
+# Set up env variables if needed (OpenAI/Anthropic API keys)
+pytest tests/ -v          # Runs all 81 unit tests locally with zero setup
+python demo/run_demo.py   # Runs the PoC demo on SQLite
 ```
 
 ## CLI
@@ -167,6 +174,8 @@ This executes a deterministic simulation of NoMemory, StaticBlacklist, and CEMG 
 
 | Variable | Default | Effect |
 |---|---|---|
+| `CEMG_STORAGE_TYPE` | `sqlite` | Storage engine type: `sqlite`, `memory`, or `neo4j` |
+| `CEMG_SQLITE_PATH` | `cemg_memory.db` | Local SQLite database file path (only used if storage type is sqlite) |
 | `CEMG_LAMBDA` | `0.03` | Decay speed for successes/unclassified experiences |
 | `CEMG_TOP_K` | `10` | Max experiences returned by /recall |
 | `CEMG_FAILURE_BOOST` | `2.0` | How much failures are upweighted vs successes |
