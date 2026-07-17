@@ -31,6 +31,7 @@ Run with:
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
@@ -55,12 +56,44 @@ load_dotenv()
 
 _driver = None
 
+
+async def _periodic_prune_task(interval_seconds: int = 3600):
+    """
+    Background worker that runs a live database prune periodically.
+    """
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            global _driver
+            if _driver and is_healthy(_driver):
+                result = prune(_driver, dry_run=False)
+                # Use standard print as a simple log
+                print(f"[CEMG Scheduler] Periodic prune completed. Deleted {result.get('eligible_count', 0)} experiences.")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"[CEMG Scheduler] Error during periodic prune: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _driver
     _driver = get_driver()
     bootstrap_schema(_driver)
+
+    # Spawn the background task
+    interval = float(os.getenv("CEMG_PRUNE_INTERVAL_SECONDS", "3600"))
+    pruning_task = asyncio.create_task(_periodic_prune_task(interval))
+
     yield
+
+    # Cleanup background task
+    pruning_task.cancel()
+    try:
+        await pruning_task
+    except asyncio.CancelledError:
+        pass
+
     _driver.close()
 
 

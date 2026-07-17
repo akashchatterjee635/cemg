@@ -45,8 +45,12 @@ from typing import Optional
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, Driver
 
-from cemg.classify import classify_failure, compute_verification_status, LAMBDA_BY_CLASS
+from cemg.classify import classify_failure, compute_verification_status, LAMBDA_BY_CLASS, generalize_params
 from cemg.security import sanitize_external_content, is_external_source
+from cemg.embeddings import EmbeddingProvider, TfidfCosineProvider
+
+_DEFAULT_EMBEDDING_PROVIDER = TfidfCosineProvider()
+
 
 load_dotenv()
 
@@ -102,16 +106,15 @@ def keyword_overlap(query: str, *fields: str) -> float:
 # -- action signature ------------------------------------------------------------
 def make_action_signature(tool: str, params: dict) -> str:
     """
-    Deterministic identity for "this specific call" -- exact tool + exact
-    params, hashed. This is intentionally an EXACT match, not a fuzzy
-    generalisation (e.g. it does not group all read_file calls together
-    regardless of path) -- fuzzy signature matching is a real
-    generalisation the system doesn't attempt yet; see the docstring
-    note in cemg/agent.py for why that's a stated limitation, not an
-    oversight.
+    Deterministic identity for an action signature. Applies generic parameter
+    normalization (removing specific numbers, timestamps, and UUIDs) and
+    tool-specific rules (like extracting the folder path for files) before
+    hashing. This groups structurally identical actions to avoid signature explosion.
     """
-    canonical = json.dumps({"tool": tool, "params": params}, sort_keys=True)
+    generalized = generalize_params(tool, params)
+    canonical = json.dumps({"tool": tool, "params": generalized}, sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
 
 
 # -- connection ------------------------------------------------------------------
@@ -311,6 +314,7 @@ def read_relevant(
     top_k:            int   = TOP_K,
     fail_boost:       float = FAIL_BOOST,
     relevance_weight: float = RELEVANCE_WEIGHT,
+    embedding_provider: Optional[EmbeddingProvider] = None,
 ) -> list[dict]:
     """
     Retrieve the most relevant past experiences for the agent.
@@ -323,7 +327,7 @@ def read_relevant(
     Scoring (all computed live in Python, every call):
         score = decay_for_class(ts, failure_class)      <- class-aware, live
                 x (fail_boost if outcome=='failure' else 1.0)
-                x (1 + relevance_weight x keyword_overlap(...))
+                x (1 + relevance_weight x semantic_similarity)
 
     Each returned row also carries its live verification status
     (CLEAN/ACTIVE_FAILURE/PROBATION/CONFIRMED_BROKEN/RESOLVED) computed
@@ -365,10 +369,15 @@ def read_relevant(
         result = sess.run(cypher, params)
         raw_rows = [dict(r) for r in result]
 
+    provider = embedding_provider or _DEFAULT_EMBEDDING_PROVIDER
+    if query_action and raw_rows:
+        relevances = provider.compute_similarity(query_action, raw_rows)
+    else:
+        relevances = [0.0] * len(raw_rows)
+
     scored: list[dict] = []
-    for r in raw_rows:
+    for r, rel in zip(raw_rows, relevances):
         w_now = decay_for_class(r["ts"], r.get("failure_class"))
-        rel   = keyword_overlap(query_action, r["action"], r["reasoning"], r["observed_error"], r["context_hint"])
         boost = fail_boost if r["outcome"] == "failure" else 1.0
         score = w_now * boost * (1 + relevance_weight * rel)
 
@@ -390,6 +399,7 @@ def read_relevant(
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored[:top_k]
+
 
 
 # -- read: causal chain -------------------------------------------------------

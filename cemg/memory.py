@@ -39,6 +39,8 @@ from cemg.graph import (
     make_action_signature,
     DEFAULT_NAMESPACE,
 )
+from cemg.embeddings import EmbeddingProvider
+
 
 load_dotenv()
 
@@ -153,15 +155,17 @@ def recall_relevant(
     task_namespace:   Optional[str] = None,
     include_failures: bool  = True,
     top_k:            int   = TOP_K,
+    embedding_provider: Optional[EmbeddingProvider] = None,
 ) -> list[ExperienceRecord]:
     """Retrieve the most relevant past experiences, ranked and status-annotated."""
     rows = read_relevant(
-        driver           = driver,
-        agent_id         = agent_id,
-        query_action     = query_action,
-        task_namespace   = task_namespace,
-        include_failures = include_failures,
-        top_k            = top_k,
+        driver             = driver,
+        agent_id           = agent_id,
+        query_action       = query_action,
+        task_namespace     = task_namespace,
+        include_failures   = include_failures,
+        top_k              = top_k,
+        embedding_provider = embedding_provider,
     )
     return [
         ExperienceRecord(
@@ -202,6 +206,7 @@ def build_memory_block(
     query_action:   str = "",
     task_namespace: Optional[str] = None,
     top_k:          int = TOP_K,
+    embedding_provider: Optional[EmbeddingProvider] = None,
 ) -> str:
     """
     Build the formatted memory context block for the LLM system prompt.
@@ -214,6 +219,7 @@ def build_memory_block(
     experiences = recall_relevant(
         driver, agent_id, query_action=query_action,
         task_namespace=task_namespace, top_k=top_k,
+        embedding_provider=embedding_provider,
     )
     if not experiences:
         return ""

@@ -156,3 +156,68 @@ def compute_verification_status(
                                 # regardless of how many times it failed before
 
     return VerificationStatus(status, age_days, effective_cd, failure_count, success_count)
+
+
+# -- Parameter generalisation / normalization rules ---------------------------
+_UUID_RE = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+_TIMESTAMP_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b")
+_NUMBER_RE = re.compile(r"\d+")
+
+
+def regex_normalize_string(s: str) -> str:
+    if not isinstance(s, str):
+        return s
+    s = _UUID_RE.sub("[UUID]", s)
+    s = _TIMESTAMP_RE.sub("[TIMESTAMP]", s)
+    s = _NUMBER_RE.sub("[NUM]", s)
+    return s
+
+
+def generalize_value(val):
+    if isinstance(val, dict):
+        return {k: generalize_value(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [generalize_value(item) for item in val]
+    elif isinstance(val, str):
+        return regex_normalize_string(val)
+    elif isinstance(val, (int, float)) and not isinstance(val, bool):
+        return "[NUM]"
+    return val
+
+
+def _normalize_file_path(path: str) -> str:
+    if not isinstance(path, str) or not path:
+        return path
+    import os
+    path = path.replace("\\", "/")
+    dirname = os.path.dirname(path)
+    basename = os.path.basename(path)
+    _, ext = os.path.splitext(basename)
+    if dirname:
+        return f"{dirname}/*{ext}"
+    return f"*{ext}"
+
+
+TOOL_OVERRIDES = {
+    "read_file": {"path": _normalize_file_path},
+    "write_file": {"path": _normalize_file_path},
+}
+
+
+def generalize_params(tool: str, params: dict) -> dict:
+    """
+    Generalize tool parameters by applying tool-specific overrides and generic
+    regex replacements (UUIDs, timestamps, numbers). This prevents signature
+    explosion on structurally identical calls (e.g. read_file on different files
+    or different IDs).
+    """
+    if not params:
+        return {}
+    generalized = {}
+    overrides = TOOL_OVERRIDES.get(tool, {})
+    for k, v in params.items():
+        if k in overrides:
+            v = overrides[k](v)
+        generalized[k] = generalize_value(v)
+    return generalized
+

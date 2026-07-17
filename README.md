@@ -22,15 +22,15 @@ since been fixed.
 | Capability | Naive avoid-list | CEMG |
 |---|:---:|:---:|
 | Recent failures ranked above old ones | ✗ (or frozen at write time) | ✓ live-recomputed decay |
-| Retrieval filtered by current task relevance | ✗ | ✓ keyword-overlap scoring |
+| Retrieval filtered by current task relevance | ✗ | ✓ local TF-IDF Cosine similarity (pluggable) |
 | Transient (server hiccup) vs structural (wrong reasoning) failures | ✗ (one bucket) | ✓ separate decay rates |
 | A failure can be re-tested once its cooldown passes | ✗ (permanent block) | ✓ ACTIVE_FAILURE -> PROBATION -> RESOLVED/CONFIRMED_BROKEN |
 | Cause is the raw error, not the agent's self-report | ✗ | ✓ `observed_error` kept separate from `reasoning` |
 | Cost (tokens/steps) shown alongside reliability | ✗ | ✓ so the LLM sees a real tradeoff, not just avoid/allow |
-| Stored-prompt-injection defense on external content | ✗ | ✓ sanitisation before write |
+| Stored-prompt-injection defense on external content | ✗ | ✓ sanitisation before write and embedding |
 | Cross-task memory isolation | ✗ | ✓ `task_namespace` |
 | Graceful degradation if the DB is unreachable | ✗ (crashes) | ✓ falls back to memory-less operation |
-| Decay-triggered deletion (PII / unbounded growth) | ✗ | ✓ `/memory/prune` |
+| Decay-triggered deletion (PII / unbounded growth) | ✗ | ✓ automated FastAPI lifespan scheduler & `/memory/prune` |
 | Verification status correctly isolated per task | ✗ | ✓ `task_namespace` in the ActionSignature match key, not just on raw experiences |
 | Compliance measured at the moment of decision | ✗ | ✓ pre-action snapshot via `peek_signature_status`, not a post-hoc re-query |
 
@@ -90,18 +90,23 @@ cemg/
 │   ├── memory.py      # public API: store / recall / causal_path / compliance / prune
 │   ├── classify.py    # failure classification (transient/structural) + cooldown state machine
 │   ├── security.py    # content sanitisation against stored prompt injection
+│   ├── embeddings.py  # pluggable EmbeddingProvider and local TF-IDF Cosine Similarity
 │   ├── llm.py         # provider-agnostic wrapper (Claude, OpenAI, Mistral...)
 │   ├── agent.py       # CEMG-augmented ReAct agent loop, graceful degradation
-│   └── api.py         # FastAPI -- REST endpoints
+│   └── api.py         # FastAPI -- REST endpoints (with async pruning scheduler)
 │   └── cli.py         # CLI -- thin wrapper over memory.py for dev/debugging
 ├── demo/
 │   └── run_demo.py    # session 1 (fails) vs session 2 (CEMG avoids repeating it)
 ├── eval/
 │   └── baselines.py   # B1 NoMemory, B2 TextCompression, CEMG -- properly seeded comparison
+│   └── benchmark.py   # Technical benchmark harness with significance t-tests (JSON/Console export)
 ├── tests/
-│   ├── test_core.py       # decay, relevance, task-success checks
-│   ├── test_classify.py   # failure classification + verification state machine
-│   └── test_security.py   # sanitisation against stored prompt injection
+│   ├── test_core.py            # decay, relevance, task-success checks
+│   ├── test_classify.py        # failure classification + verification state machine
+│   ├── test_security.py        # sanitisation against stored prompt injection
+│   ├── test_generalisation.py  # param normalization and tool-specificOverrides
+│   ├── test_embeddings.py      # local TF-IDF cosine similarity calculations
+│   └── test_scheduler.py       # FastAPI lifespan scheduler background task mocking
 ├── setup.sh
 ├── requirements.txt
 └── .env.example
@@ -144,19 +149,19 @@ evidence than a single failure.
 
 ## Running the comparison eval
 
+### Live LLM Comparison (baselines.py)
 ```bash
 python eval/baselines.py
 ```
+Runs B1 (no memory), B2 (text compression), and CEMG -- with CEMG and B2 **both seeded with the same prior-failure narrative** before every run.
+Prints mean +/- std for steps and failures, a compliance rate (did the agent avoid what its own memory flagged), and paired significance tests (CEMG vs. NoMemory, CEMG vs. TextCompression) when `n_runs >= 3` (using live LLM calls).
 
-Runs B1 (no memory), B2 (text compression), and CEMG -- with CEMG and B2
-**both seeded with the same prior-failure narrative** before every run,
-so the comparison actually tests whether structured memory helps more
-than an unstructured summary, rather than comparing CEMG-with-no-memory
-to a baseline that also has no memory.
-
-Prints mean +/- std for steps and failures, a compliance rate (did the
-agent avoid what its own memory flagged), and paired significance tests
-(CEMG vs. NoMemory, CEMG vs. TextCompression) when `n_runs >= 3`.
+### Local Technical Benchmark (benchmark.py)
+To run a fast, zero-dependency, local benchmark harness simulating the environments' transient errors and structural bugs over N days:
+```bash
+python eval/benchmark.py --runs 30
+```
+This executes a deterministic simulation of NoMemory, StaticBlacklist, and CEMG strategies, outputs a corporate-ready ASCII performance dashboard, calculates **paired t-test significance (p-values)** in pure Python, and writes a detailed metric report directly to `eval/benchmark_report.json`.
 
 ## Key tunable parameters (.env)
 
@@ -167,6 +172,7 @@ agent avoid what its own memory flagged), and paired significance tests
 | `CEMG_FAILURE_BOOST` | `2.0` | How much failures are upweighted vs successes |
 | `CEMG_RELEVANCE_WEIGHT` | `1.5` | How much task-relevance boosts a memory's score |
 | `CEMG_PRUNE_FLOOR` | `0.02` | Decay weight below which an experience is eligible for deletion |
+| `CEMG_PRUNE_INTERVAL_SECONDS` | `3600` | Period (seconds) at which the FastAPI lifespan task runs database pruning |
 | `CEMG_DEFAULT_NAMESPACE` | `default` | Task namespace used when none is given |
 | `CEMG_MAX_STEPS` | `15` | Max steps per agent session |
 
@@ -185,45 +191,16 @@ answer = agent.run("your task here")   # memory auto-loads + auto-saves, degrade
 
 ## Known limitations (stated, not hidden)
 
-- **Action signatures are exact-match**, not fuzzy -- `read_file(path=A)`
-  and `read_file(path=B)` are tracked as different signatures. Grouping
-  structurally similar calls is a real extension, not yet built.
-- **Relevance scoring is keyword overlap**, not semantic embedding --
-  fast and dependency-free, but "search the web" and "look this up
-  online" won't overlap. Swap in an embedding model if you need
-  semantic matching; the ranking formula doesn't care how relevance
-  is computed.
-- **Sanitisation is pattern-based**, not a complete defense against
-  stored prompt injection -- it reduces blast radius, it doesn't
-  guarantee safety. Structural separation of "data" from "instructions"
-  at the model/tooling level is the more complete fix. It also currently
-  covers `reasoning`/`observed_error` only; raw tool RESULT content isn't
-  persisted to CEMG at all yet, so today's exposure is narrower than it
-  will be once richer memory (storing full tool outputs) gets added --
-  worth revisiting the sanitiser's scope at that point.
-- **Pruning has no scheduler.** `prune_stale_experiences()` / `POST /memory/prune`
-  are correct and tested, but nothing calls them automatically -- wire
-  up a cron job or background task before relying on this for real
-  data retention compliance.
+- **Sanitisation is pattern-based**, not a complete defense against stored prompt injection -- it reduces blast radius, it doesn't guarantee safety. Structural separation of "data" from "instructions" at the model/tooling level is the more complete fix. It also currently covers `reasoning`/`observed_error` only; raw tool RESULT content isn't persisted to CEMG at all yet, so today's exposure is narrower than it will be once richer memory (storing full tool outputs) gets added -- worth revisiting the sanitiser's scope at that point.
 
 ### Fixed in the most recent pass (previously open issues)
 
-- ~~ActionSignature aggregates leaking verification status across
-  task_namespace boundaries~~ -- fixed: `task_namespace` is now part of
-  the MERGE key for every ActionSignature read and write, not just on
-  raw Experience recall.
-- ~~Compliance checked after the run against live state~~ -- fixed:
-  `CEMGAgent` now calls `peek_signature_status()` immediately before
-  each action executes and stores the result in `decision_snapshots`;
-  `evaluate_compliance()` is a pure function over those snapshots, with
-  a dedicated regression test proving it catches a violation that a
-  post-hoc check would have missed.
-- Also found and fixed while addressing the above: the original
-  `ActionSignature` uniqueness constraint enforced `signature IS UNIQUE`
-  *globally*, which would have broken the moment two different agents
-  called the same tool with the same parameters. Replaced with a
-  composite index; correctness now comes from the MERGE pattern
-  matching all three identity properties together.
+- ~~Action signatures are exact-match~~ -- fixed: Added generic regex parameter normalization (stripping UUIDs, timestamps, numbers) and config-driven parameter overrides (e.g. `read_file` maps `path/to/file.ext` -> `path/to/*.ext` parent directories) to group structurally identical tool calls.
+- ~~Relevance scoring is keyword overlap~~ -- fixed: Introduced a pluggable `EmbeddingProvider` interface with a default pure Python `TfidfCosineProvider` that calculates cosine similarity over dynamic TF-IDF candidate matrices, prioritizing rare keywords without introducing network/API latency.
+- ~~Pruning has no scheduler~~ -- fixed: Embedded an asyncio background task inside FastAPI's startup/lifespan events to run live database pruning periodically (interval configurable via `CEMG_PRUNE_INTERVAL_SECONDS`).
+- ~~ActionSignature aggregates leaking verification status across task_namespace boundaries~~ -- fixed: `task_namespace` is now part of the MERGE key for every ActionSignature read and write, not just on raw Experience recall.
+- ~~Compliance checked after the run against live state~~ -- fixed: `CEMGAgent` now calls `peek_signature_status()` immediately before each action executes and stores the result in `decision_snapshots`; `evaluate_compliance()` is a pure function over those snapshots, with a dedicated regression test proving it catches a violation that a post-hoc check would have missed.
+- ~~Uniqueness constraints on signatures causing collissions~~ -- fixed: Replaced the global signature uniqueness constraint with a composite index over (signature, agent_id, task_namespace); correctness now comes from the MERGE pattern matching all three identity properties.
 
 ## Research context
 

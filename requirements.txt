@@ -9,4 +9,4 @@ typer>=0.15,<0.27
 anthropic==0.34.2      # optional — only needed if you use Claude
 openai==1.35.0         # optional — only needed if you use OpenAI
 pytest==8.2.2
-scipy==1.13.1           # for paired t-test in eval/baselines.py
+# scipy==1.13.1           # for paired t-test in eval/baselines.py -- disabled due to WinError 4551 build block on Python 3.14
