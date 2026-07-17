@@ -11,14 +11,14 @@ from fastapi.testclient import TestClient
 
 class TestScheduler:
 
-    @patch("cemg.api.get_driver")
+    @patch("cemg.api.get_storage_provider")
     @patch("cemg.api.bootstrap_schema")
     @patch("cemg.api.is_healthy")
     @patch("cemg.api.prune")
-    def test_lifespan_spawns_and_cancels_pruning_task(self, mock_prune, mock_is_healthy, mock_bootstrap, mock_get_driver):
+    def test_lifespan_spawns_and_cancels_pruning_task(self, mock_prune, mock_is_healthy, mock_bootstrap, mock_get_storage):
         # Set up mocks
         mock_driver = MagicMock()
-        mock_get_driver.return_value = mock_driver
+        mock_get_storage.return_value = mock_driver
         mock_is_healthy.return_value = True
         mock_prune.return_value = {"eligible_count": 5, "deleted": True}
 

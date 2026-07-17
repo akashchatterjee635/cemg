@@ -48,6 +48,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from neo4j import Driver
+from cemg.storage import BaseStorage, get_storage_provider
 
 from cemg.graph import get_driver, bootstrap_schema, is_healthy, DEFAULT_NAMESPACE
 from cemg.llm  import get_llm, chat, LLMProvider
@@ -131,7 +132,7 @@ def _execute_tool(name: str, params: dict) -> tuple[str, str, str]:
 class CEMGAgent:
     agent_id:       str
     llm:            LLMProvider
-    driver:         Driver
+    driver:         Driver | BaseStorage
     task_namespace: str          = DEFAULT_NAMESPACE
     session_id:     str          = field(default_factory=lambda: str(uuid.uuid4())[:8])
     history:        list[dict]   = field(default_factory=list)
@@ -346,7 +347,7 @@ Rules:
 
 
 def make_agent(agent_id: str, task_namespace: str = DEFAULT_NAMESPACE) -> CEMGAgent:
-    driver = get_driver()
+    driver = get_storage_provider()
     bootstrap_schema(driver)
     llm    = get_llm()
     return CEMGAgent(agent_id=agent_id, llm=llm, driver=driver, task_namespace=task_namespace)

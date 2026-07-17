@@ -41,6 +41,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from cemg.storage import get_storage_provider
 from cemg.graph import bootstrap_schema, get_driver, is_healthy, DEFAULT_NAMESPACE
 from cemg.memory import (
     store_experience,
@@ -78,7 +79,7 @@ async def _periodic_prune_task(interval_seconds: int = 3600):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _driver
-    _driver = get_driver()
+    _driver = get_storage_provider()
     bootstrap_schema(_driver)
 
     # Spawn the background task

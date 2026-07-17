@@ -30,6 +30,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from neo4j import Driver
 
+from cemg.storage import BaseStorage
 from cemg.graph import (
     write_experience,
     read_relevant,
@@ -100,7 +101,7 @@ class ExperienceRecord:
 
 # -- Public API -----------------------------------------------------------------
 def store_experience(
-    driver:         Driver,
+    driver:         Driver | BaseStorage,
     agent_id:       str,
     session_id:     str,
     action:         str,
@@ -149,7 +150,7 @@ def store_experience(
 
 
 def recall_relevant(
-    driver:           Driver,
+    driver:           Driver | BaseStorage,
     agent_id:         str,
     query_action:     str  = "",
     task_namespace:   Optional[str] = None,
@@ -188,7 +189,7 @@ def recall_relevant(
     ]
 
 
-def get_causal_path(driver: Driver, exp_id: str, max_depth: int = 10) -> list[ExperienceRecord]:
+def get_causal_path(driver: Driver | BaseStorage, exp_id: str, max_depth: int = 10) -> list[ExperienceRecord]:
     rows = read_causal_path(driver, exp_id, max_depth)
     return [
         ExperienceRecord(
@@ -201,7 +202,7 @@ def get_causal_path(driver: Driver, exp_id: str, max_depth: int = 10) -> list[Ex
 
 
 def build_memory_block(
-    driver:         Driver,
+    driver:         Driver | BaseStorage,
     agent_id:       str,
     query_action:   str = "",
     task_namespace: Optional[str] = None,
@@ -254,7 +255,7 @@ def build_memory_block(
 
 
 def peek_signature_status(
-    driver:         Driver,
+    driver:         Driver | BaseStorage,
     agent_id:       str,
     tool:           str,
     params:         dict,
@@ -309,6 +310,6 @@ def evaluate_compliance(decision_snapshots: list[dict]) -> dict:
     }
 
 
-def prune(driver: Driver, agent_id: Optional[str] = None, dry_run: bool = True) -> dict:
+def prune(driver: Driver | BaseStorage, agent_id: Optional[str] = None, dry_run: bool = True) -> dict:
     """Thin wrapper over graph.prune_stale_experiences -- see that docstring."""
     return prune_stale_experiences(driver, agent_id=agent_id, dry_run=dry_run)
