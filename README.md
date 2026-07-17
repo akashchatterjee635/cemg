@@ -37,7 +37,7 @@ since been fixed.
 ## Quickstart
 
 ```bash
-git clone https://github.com/akash/cemg
+git clone https://github.com/akashchatterjee635/cemg
 cd cemg
 bash setup.sh            # installs deps, starts Neo4j, copies .env
 # -> edit .env: add your ANTHROPIC_API_KEY or OPENAI_API_KEY
