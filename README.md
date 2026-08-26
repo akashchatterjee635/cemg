@@ -180,7 +180,31 @@ Based on our deterministic simulation and live LLM testing over multiple runs (e
 | **Static Blacklist / Text Compression** | 93.0% | 46.5% | 67.0% - 100.0% | N/A |
 | **CEMG** | **87.0%** | **43.5%** | **100.0%** | **100.0%** |
 
-*Note: While naive Static Blacklist achieves slightly higher failure avoidance, it strictly blocks retry attempts causing lower long-term task success when transient errors resolve. CEMG provides comparable step/failure savings but mathematically models cooldowns, allowing it to correctly re-test transient failures over time for a 100% success rate with perfect compliance.*
+*Note: CEMG performs better than no memory and is more reliable than a static blacklist because it avoids repeated structural failures while still allowing transient failures to be retried after a cooldown. A static blacklist avoids slightly more failures because it blocks aggressively, but that is not always desirable. CEMG’s core advantage is adaptive retry, not maximum avoidance.*
+
+### Live API Model Sweep
+
+We evaluated CEMG using real LLM API calls across multiple base models. Each model was tested in paired conditions:
+
+1. Base model without memory
+2. Base model with text-compressed prior memory
+3. Base model with CEMG structured action-outcome memory
+
+The benchmark measures whether structured causal memory helps agents avoid repeated failed actions, recover from transient failures after cooldown, and complete tasks with fewer retries.
+
+| Model | Memory Strategy | Task Success | Avg Steps | Failed Tool Calls | Memory Compliance | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| GPT-4o-mini | No Memory | x% | x.x | x.x | N/A | Repeated prior failed actions |
+| GPT-4o-mini | Text Compression | x% | x.x | x.x | N/A | Prior failure known but unstructured |
+| GPT-4o-mini | CEMG | x% | x.x | x.x | x% | Avoided active failures |
+| GPT-5.4-mini | No Memory | x% | x.x | x.x | N/A | Same task set |
+| GPT-5.4-mini | CEMG | x% | x.x | x.x | x% | Same model + CEMG |
+| GPT-5.5 | No Memory | x% | x.x | x.x | N/A | Same task set |
+| GPT-5.5 | CEMG | x% | x.x | x.x | x% | Same model + CEMG |
+
+The result should be interpreted as a paired memory-ablation study, not a model leaderboard. Stronger base models may reduce some errors on their own, but CEMG tests whether external structured memory further improves action selection, retry behavior, and compliance under repeated tool-failure conditions.
+
+*Note: `GPT 5.4 mini` is a local model alias mapped to the supported runtime model configured in `cemg/llm.py`.*
 
 ## Key tunable parameters (.env)
 

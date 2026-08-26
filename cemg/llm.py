@@ -79,6 +79,7 @@ class OpenAIProvider(LLMProvider):
         full_msgs.extend(messages)
         
         api_model = self.model
+        # local model alias "GPT 5.4 mini" maps to supported runtime model "gpt-4o-mini"
         if api_model == "GPT 5.4 mini":
             api_model = "gpt-4o-mini"
 

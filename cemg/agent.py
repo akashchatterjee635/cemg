@@ -44,7 +44,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Callable
 
 from dotenv import load_dotenv
 from neo4j import Driver
@@ -130,19 +130,6 @@ def _execute_tool(name: str, params: dict) -> tuple[str, str, str]:
 # -- Agent ------------------------------------------------------------------------
 @dataclass
 class CEMGAgent:
-    agent_id:       str
-    llm:            LLMProvider
-    driver:         Driver | BaseStorage
-    task_namespace: str          = DEFAULT_NAMESPACE
-    session_id:     str          = field(default_factory=lambda: str(uuid.uuid4())[:8])
-    history:        list[dict]   = field(default_factory=list)
-    last_exp_id:    Optional[str] = None
-    step:           int          = 0
-
-    # -- in-run tracking, all reset per .run() call --
-    run_failures:              int        = 0
-    run_fail_actions:          list[str]  = field(default_factory=list)
-    decision_snapshots:        list[dict] = field(default_factory=list)  # pre-decision status, one per step
     agent_id:            str
     llm:                 LLMProvider
     driver:              Driver | BaseStorage
@@ -153,6 +140,8 @@ class CEMGAgent:
     history:             list[dict]         = field(default_factory=list)
     last_exp_id:         Optional[str]      = None
     step:                int                = 0
+    
+    # -- in-run tracking, all reset per .run() call --
     run_failures:        int                = 0
     run_fail_actions:    list[str]          = field(default_factory=list)
     decision_snapshots:  list[dict]         = field(default_factory=list)
