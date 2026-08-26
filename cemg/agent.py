@@ -143,7 +143,20 @@ class CEMGAgent:
     run_failures:              int        = 0
     run_fail_actions:          list[str]  = field(default_factory=list)
     decision_snapshots:        list[dict] = field(default_factory=list)  # pre-decision status, one per step
-    memory_degraded:           bool       = False   # True if Neo4j was unreachable this run
+    agent_id:            str
+    llm:                 LLMProvider
+    driver:              Driver | BaseStorage
+    task_namespace:      str                = DEFAULT_NAMESPACE
+    tool_executor:       Optional[Callable] = None
+    tool_schema:         Optional[str]      = None
+    session_id:          str                = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    history:             list[dict]         = field(default_factory=list)
+    last_exp_id:         Optional[str]      = None
+    step:                int                = 0
+    run_failures:        int                = 0
+    run_fail_actions:    list[str]          = field(default_factory=list)
+    decision_snapshots:  list[dict]         = field(default_factory=list)
+    memory_degraded:     bool               = False
 
     # -- system prompt builder --------------------------------------------------
     def _build_system(self, task: str) -> str:
@@ -166,13 +179,15 @@ class CEMGAgent:
             self.memory_degraded = True
             print("[CEMG] WARNING: Neo4j unreachable -- running without memory this session")
 
+        schema_str = self.tool_schema if self.tool_schema else TOOL_SCHEMA_STR
+
         return f"""You are a reliable long-horizon agent.
 Your task: {task}
 
 {memory_block}
 
 You have these tools:
-{TOOL_SCHEMA_STR}
+{schema_str}
 
 At every step output ONLY a JSON object with exactly these keys:
 {{
@@ -309,7 +324,10 @@ Rules:
                 if snapshot["status_before"] in ("ACTIVE_FAILURE", "CONFIRMED_BROKEN"):
                     print(f"[CEMG] NOTE: memory flagged this action as {snapshot['status_before']} before it was attempted")
 
-            result, outcome, observed_error = _execute_tool(tool, params)
+            if self.tool_executor:
+                result, outcome, observed_error = self.tool_executor(tool, params)
+            else:
+                result, outcome, observed_error = _execute_tool(tool, params)
 
             if verbose:
                 status = "OK" if outcome == "success" else "FAILED"
