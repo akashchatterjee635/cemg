@@ -77,8 +77,13 @@ class OpenAIProvider(LLMProvider):
         if system:
             full_msgs.append({"role": "system", "content": system})
         full_msgs.extend(messages)
+        
+        api_model = self.model
+        if api_model == "GPT 5.4 mini":
+            api_model = "gpt-4o-mini"
+
         resp = client.chat.completions.create(
-            model       = self.model,
+            model       = api_model,
             messages    = full_msgs,
             max_tokens  = max_tokens,
             temperature = temperature,

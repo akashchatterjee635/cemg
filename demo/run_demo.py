@@ -33,7 +33,8 @@ from rich.table   import Table
 from rich         import box
 
 from cemg.agent  import make_agent
-from cemg.graph  import get_driver, bootstrap_schema
+from cemg.storage import get_storage_provider
+from cemg.graph  import bootstrap_schema
 from cemg.memory import recall_relevant, build_memory_block
 
 console = Console()
@@ -107,7 +108,7 @@ def main():
         border_style="cyan"
     ))
 
-    driver = get_driver()
+    driver = get_storage_provider()
     bootstrap_schema(driver)
 
     # ── Show memory BEFORE session 2 ─────────────────────────────────────────

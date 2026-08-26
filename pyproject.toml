@@ -12,7 +12,7 @@ dependencies = [
     "neo4j==5.21.0",
     "fastapi==0.111.0",
     "uvicorn==0.30.1",
-    "pydantic==2.7.4",
+    "pydantic>=2.0",
     "python-dotenv==1.0.1",
     "typer>=0.15,<0.27",
     "rich>=13.7,<16",

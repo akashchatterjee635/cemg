@@ -47,17 +47,11 @@ console = Console()
 
 def _get_driver_or_exit():
     """
-    Shared connection helper for every DB-backed command. Fails fast
-    with a clear message instead of a raw stack trace -- most of these
-    commands are run ad-hoc during development, where a clear "Neo4j
-    isn't running" beats a traceback.
+    Shared connection helper for every DB-backed command.
     """
-    from cemg.graph import get_driver, bootstrap_schema, is_healthy
-    driver = get_driver()
-    if not is_healthy(driver):
-        console.print("[red]Neo4j is unreachable.[/red] Check NEO4J_URI/USER/PASSWORD in .env, "
-                       "and that the database is running (see setup.sh).")
-        raise typer.Exit(code=1)
+    from cemg.storage import get_storage_provider
+    from cemg.graph import bootstrap_schema
+    driver = get_storage_provider()
     bootstrap_schema(driver)
     return driver
 
@@ -193,13 +187,18 @@ def prune(
 # -- health ------------------------------------------------------------------------
 @app.command()
 def health():
-    """Check Neo4j connectivity and LLM provider configuration."""
-    from cemg.graph import get_driver, is_healthy
+    """Check connectivity to storage and LLM provider configuration."""
+    from cemg.storage import get_storage_provider
     import os
 
-    driver = get_driver()
-    ok = is_healthy(driver)
-    console.print(f"Neo4j:  {'[green]connected[/green]' if ok else '[red]unreachable[/red]'}")
+    try:
+        store = get_storage_provider()
+        ok = store.is_healthy()
+        store_type = type(store).__name__
+        console.print(f"Storage ({store_type}):  {'[green]connected[/green]' if ok else '[red]unreachable[/red]'}")
+        store.close()
+    except Exception as e:
+        console.print(f"Storage:  [red]error: {e}[/red]")
 
     has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
     has_openai    = bool(os.getenv("OPENAI_API_KEY"))
