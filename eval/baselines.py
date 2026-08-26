@@ -49,6 +49,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from cemg.llm    import get_llm, chat, LLMProvider
+from cemg.storage import get_storage_provider
 from cemg.graph  import get_driver, bootstrap_schema
 from cemg.memory import store_experience, evaluate_compliance
 
@@ -61,6 +62,7 @@ TOOL_SCHEMA = [
     {"name": "web_search",  "parameters": {"query": "string"}},
     {"name": "read_file",   "parameters": {"path": "string"}},
     {"name": "write_file",  "parameters": {"path": "string", "text": "string"}},
+    {"name": "mkdir",       "parameters": {"path": "string"}},
     {"name": "finish",      "parameters": {"answer": "string"}},
 ]
 TOOL_SCHEMA_STR = json.dumps(TOOL_SCHEMA, indent=2)
@@ -98,6 +100,10 @@ def _run_tool(name: str, params: dict) -> tuple[str, str, str]:
             os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
             with open(p, "w") as f: f.write(t)
             return f"Wrote {len(t)} chars to {p}", "success", ""
+        if name == "mkdir":
+            p = params.get("path", "")
+            os.makedirs(p, exist_ok=True)
+            return f"Directory created: {p}", "success", ""
         if name == "finish":
             return params.get("answer", ""), "success", ""
         return f"Unknown tool: {name}", "failure", f"UnknownToolError: {name}"
@@ -260,7 +266,7 @@ def run_comparison(task: str, n_runs: int = 3):
     from cemg.agent import CEMGAgent
 
     llm    = get_llm()
-    driver = get_driver()
+    driver = get_storage_provider()
     bootstrap_schema(driver)
 
     results: dict[str, list[dict]] = {"NoMemory": [], "TextCompression": [], "CEMG": []}
@@ -283,7 +289,7 @@ def run_comparison(task: str, n_runs: int = 3):
         agent_id = f"eval_{uuid.uuid4().hex[:6]}"
         seed_prior_failure(driver, agent_id)   # <-- the key fix
         cemg = CEMGAgent(agent_id=agent_id, llm=llm, driver=driver, task_namespace=EVAL_NAMESPACE)
-        answer = cemg.run(task, verbose=False)
+        answer = cemg.run(task, verbose=True)
         task_result = check_task_success()
 
         compliance = evaluate_compliance(cemg.decision_snapshots)
