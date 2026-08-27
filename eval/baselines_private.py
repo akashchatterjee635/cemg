@@ -83,7 +83,28 @@ def _run_tool(name: str, params: dict) -> tuple[str, str, str]:
         if name == "internal_rag":
             q = params.get("query", "")
             if "framo" in q.lower() or "sd125" in q.lower():
-                return f"Private Manual Snippet: Framo SD125 pump faults are usually caused by hydraulic pressure drops. Check the pressure relief valve.", "success", ""
+                return """Private Manual Snippet:
+# Maintenance Summary: Framo SD125 Pump Fault
+
+## Equipment Overview
+* **Equipment:** Framo SD125 Submerged Cargo Pump
+* **System:** Hydraulic Cargo Pumping System
+* **Reference Data:** Internal Vessel Maintenance Manuals (via Internal RAG)
+
+## Common Fault Diagnostics
+1. **Loss of Hydraulic Pressure:** Inspect the main hydraulic feed lines and return lines for leaks. Ensure the local control valve (STC) is fully responsive.
+2. **Abnormal Vibration:** Check the impeller and wear rings for foreign debris or excessive clearance caused by abrasive cargo.
+3. **Cofferdam Purge Alarm:** Test the cofferdam purging system. If liquid is detected during purging, it indicates a breach in either the cargo seal or the hydraulic oil seal.
+
+## Corrective Maintenance Action Plan
+* **Isolation:** Shut down hydraulic power to the specific pump and isolate the SD125 unit from the main hydraulic ring line.
+* **Seal Inspection/Replacement:** If the cofferdam check reveals cargo ingress, extract the pump head and replace the mechanical cargo seal assembly. 
+* **Clearance Verification:** Measure the wear ring clearances and ensure they fall within the strict OEM tolerances for the SD125 model.
+* **Recommissioning:** Perform a full pressure test and a dry purge routine before opening the cargo block valves.
+
+## Safety & Compliance Notes
+* **WARNING:** Do not use generic public pressure tolerances. Refer strictly to the ship's specific OEM calibration tables.
+* **Status:** Draft prepared for Chief Engineer review.""", "success", ""
             return f"No private records found for '{q}'.", "success", ""
         if name == "web_search":
             q = params.get("query", "")
@@ -132,8 +153,8 @@ def check_task_success(output_path: str = "data/reports/framo_sd125_summary.md",
         content = f.read()
     if len(content.strip()) < min_length:
         return {"success": False, "length": len(content.strip()), "reason": "content too short"}
-    if "pressure relief valve" not in content.lower():
-        return {"success": False, "length": len(content.strip()), "reason": "missing key finding"}
+    if "cofferdam purge" not in content.lower():
+        return {"success": False, "length": len(content.strip()), "reason": "missing key finding from RAG"}
     return {"success": True, "length": len(content.strip()), "reason": "ok"}
 
 
