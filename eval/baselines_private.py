@@ -382,8 +382,13 @@ def _print_summary(results: dict[str, list[dict]], compliance_reports: list[dict
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run private maintenance benchmark")
+    parser.add_argument("--runs", type=int, default=5, help="Number of runs per agent")
+    args = parser.parse_args()
+
     TASK = (
         "Create a maintenance summary for the Framo SD125 pump fault and save it "
         "to data/reports/framo_sd125_summary.md."
     )
-    run_comparison(TASK, n_runs=1)
+    run_comparison(TASK, n_runs=args.runs)

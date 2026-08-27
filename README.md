@@ -105,8 +105,9 @@ cemg/
 ├── demo/
 │   └── run_demo.py    # session 1 (fails) vs session 2 (CEMG avoids repeating it)
 ├── eval/
-│   └── baselines.py   # B1 NoMemory, B2 TextCompression, CEMG -- properly seeded comparison
-│   └── benchmark.py   # Technical benchmark harness with significance t-tests (JSON/Console export)
+│   ├── baselines.py           # B1 NoMemory, B2 TextCompression, CEMG -- properly seeded comparison
+│   ├── baselines_private.py   # Live LLM evaluation on private maintenance report generation
+│   └── benchmark.py           # Technical benchmark harness with significance t-tests (JSON/Console export)
 ├── tests/
 │   ├── test_core.py            # decay, relevance, task-success checks
 │   ├── test_classify.py        # failure classification + verification state machine
@@ -162,6 +163,23 @@ python eval/baselines.py
 ```
 Runs B1 (no memory), B2 (text compression), and CEMG -- with CEMG and B2 **both seeded with the same prior-failure narrative** before every run.
 Prints mean +/- std for steps and failures, a compliance rate (did the agent avoid what its own memory flagged), and paired significance tests (CEMG vs. NoMemory, CEMG vs. TextCompression) when `n_runs >= 3` (using live LLM calls).
+
+### Private Maintenance Report Benchmark
+
+```bash
+python eval/baselines_private.py --runs 5
+```
+
+This benchmark evaluates CEMG with real LLM calls on a private maintenance-report task. The agent must retrieve Framo SD125 pump context through `internal_rag`, avoid irrelevant public `web_search`, avoid the broken `legacy_save` tool, write the required report file, and only call `finish` after the file exists.
+
+*Note on failures: `web_search` is treated as a structural semantic failure for private vessel manuals: the tool runs successfully but returns irrelevant public content, making it the wrong action for this task.*
+
+The benchmark compares:
+- NoMemory
+- TextCompression memory
+- CEMG structured action-outcome memory
+
+Task success is checked against the actual generated file, including whether it contains the private-RAG finding "cofferdam purge".
 
 ### Local Technical Benchmark (benchmark.py)
 To run a fast, zero-dependency, local benchmark harness simulating the environments' transient errors and structural bugs over N days:
